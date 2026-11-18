@@ -602,6 +602,20 @@ static void board_early(uintptr_t dtb)
 	}
 	con_clear(BLACK);
 #ifdef AP_WDT_BASE
+	/* First screen: only the hypervisor/Haven watchdog SMC result, held 20 s. */
+	{
+		uint64_t st = smc(0x86000006, 0, 0, 0);
+		uint64_t pet = smc(0x86000007, 0, 0, 0);
+		uint64_t ctl0 = smc(0x86000005, 0, 0, 0);
+		uint64_t st2 = smc(0x86000006, 0, 0, 0);
+		uint64_t pet2 = smc(0x86000007, 0, 0, 0);
+		con_hex2("HWD", "status=", (uint32_t)st, "pet=", (uint32_t)pet);
+		con_hex2("HWD", "ctl0=", (uint32_t)ctl0, "status2=", (uint32_t)st2);
+		con_hex2("HWD", "pet2=", (uint32_t)pet2, "hi=", (uint32_t)(st >> 32));
+	}
+	hold(20);
+#endif
+#ifdef AP_WDT_BASE
 	/* PD2049: ABL may leave the AP watchdog armed; pet and disable it before XNU. */
 	probe_armed = 1;
 	probe_faults = 0;
