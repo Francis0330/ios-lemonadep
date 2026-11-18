@@ -41,6 +41,30 @@
 /* Refuse to start the kernel outside a live /memory bank or on a no-map carve-out. */
 #define BOARD_CHECK_DRAM	1
 
+#elif defined(BOARD_PD2049)
+
+#define BOARD_NAME		"pd2049"
+/* PD2049 live FDT reserved-memory/splash_region: 0xe1000000 + 0x2300000 */
+#define FB_BASE			0xe1000000UL
+#define FB_SIZE			0x2300000UL
+/* AMB662/EA8079 command-mode panel: 1080x2400, a8r8g8b8 */
+#define FB_W			1080
+#define FB_H			2400
+#define FB_STRIDE		(FB_W * 4)
+#define FB_BPP			4
+#define GICD_BASE		0x17a00000UL
+#define GICR_BASE		0x17a60000UL
+#define GICR_SIZE		0x100000UL
+#define VTIMER_INTID		27
+#define PTIMER_INTID		30
+#define BOARD_EL1_PTIMER	0
+#define IMEM_RESTART_REASON	0x146bf65cUL
+#define PSHOLD			0UL
+#define UFS_BASE		0x01d84000UL
+#define MDP_BASE		0x0ae00000UL
+#define BOARD_HAS_MDSS		1
+#define BOARD_CHECK_DRAM	1
+
 #else /* sweet */
 
 #define BOARD_NAME		"sweet"
