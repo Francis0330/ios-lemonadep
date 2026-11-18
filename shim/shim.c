@@ -513,6 +513,24 @@ static void board_early(uintptr_t dtb)
 		con_setup(lo, 0, 0, 0, 4);
 	}
 	con_clear(BLACK);
+#ifdef AP_WDT_BASE
+	/* PD2049: ABL may leave the AP watchdog armed; pet and disable it before XNU. */
+	probe_armed = 1;
+	probe_faults = 0;
+	{
+		uint32_t en = rd32(AP_WDT_BASE + 0x08);
+		uint32_t sts = rd32(AP_WDT_BASE + 0x0c);
+		uint32_t bark = rd32(AP_WDT_BASE + 0x10);
+		uint32_t bite = rd32(AP_WDT_BASE + 0x14);
+		con_hex2("WDT", "en=", en, "sts=", sts);
+		con_hex2("WDT", "bark=", bark, "bite=", bite);
+		wr32(AP_WDT_BASE + 0x04, 1); /* WDT0_RST: pet */
+		wr32(AP_WDT_BASE + 0x08, 0); /* WDT0_EN: disable */
+		con_hex2("WDT", "en2=", rd32(AP_WDT_BASE + 0x08), "sts2=", rd32(AP_WDT_BASE + 0x0c));
+		con_hex2("WDT", "faults=", probe_faults, "esr=", probe_esr);
+	}
+	probe_armed = 0;
+#endif
 	con_str("SHIM", "lemonadep milestone 1");
 	con_hex2("EL", "cur=", rsr("CurrentEL") >> 2, "img=", (uintptr_t)_head);
 	con_hex2("DTB", "at=", dtb, "magic=", dtb ? __builtin_bswap32(rd32(dtb)) : 0);
