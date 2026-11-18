@@ -82,6 +82,23 @@ static uint64_t smc(uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3)
 	return x0;
 }
 
+static uint64_t smc_ret2(uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3,
+    uint64_t *out2)
+{
+	register uint64_t x0 __asm__("x0") = fn;
+	register uint64_t x1 __asm__("x1") = a1;
+	register uint64_t x2 __asm__("x2") = a2;
+	register uint64_t x3 __asm__("x3") = a3;
+	__asm__ volatile("smc #0"
+			 : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3)
+			 :
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17", "memory");
+	if (out2)
+		*out2 = x2;
+	return x0;
+}
+
 static uint64_t now(void)
 {
 	isb();
@@ -602,16 +619,15 @@ static void board_early(uintptr_t dtb)
 	}
 	con_clear(BLACK);
 #ifdef AP_WDT_BASE
-	/* First screen: only the hypervisor/Haven watchdog SMC result, held 20 s. */
+	/* Read-only Gunyah/Haven watchdog probe: a0 status, a2 ms since last ping. */
 	{
-		uint64_t st = smc(0x86000006, 0, 0, 0);
+		uint64_t a2 = 0, a2b = 0;
+		uint64_t st = smc_ret2(0x86000006, 0, 0, 0, &a2);
 		uint64_t pet = smc(0x86000007, 0, 0, 0);
-		uint64_t ctl0 = smc(0x86000005, 0, 0, 0);
-		uint64_t st2 = smc(0x86000006, 0, 0, 0);
-		uint64_t pet2 = smc(0x86000007, 0, 0, 0);
-		con_hex2("HWD", "status=", (uint32_t)st, "pet=", (uint32_t)pet);
-		con_hex2("HWD", "ctl0=", (uint32_t)ctl0, "status2=", (uint32_t)st2);
-		con_hex2("HWD", "pet2=", (uint32_t)pet2, "hi=", (uint32_t)(st >> 32));
+		uint64_t st2 = smc_ret2(0x86000006, 0, 0, 0, &a2b);
+		con_hex2("HWD", "st=", (uint32_t)st, "a2=", (uint32_t)a2);
+		con_hex2("HWD", "pet=", (uint32_t)pet, "st2=", (uint32_t)st2);
+		con_hex2("HWD", "a2b=", (uint32_t)a2b, "hi=", (uint32_t)(st >> 32));
 	}
 	hold(20);
 #endif
@@ -663,18 +679,6 @@ static void board_early(uintptr_t dtb)
 	con_skip();
 #ifdef AP_WDT_BASE
 	pon_survey();
-	/* SM8350: Linux pets the hypervisor/Haven watchdog over SMC 0x86000005-8. */
-	{
-		uint64_t st = smc(0x86000006, 0, 0, 0);
-		uint64_t pet = smc(0x86000007, 0, 0, 0);
-		uint64_t ctl0 = smc(0x86000005, 0, 0, 0);
-		uint64_t st2 = smc(0x86000006, 0, 0, 0);
-		uint64_t pet2 = smc(0x86000007, 0, 0, 0);
-		con_hex2("HWD", "status=", (uint32_t)st, "pet=", (uint32_t)pet);
-		con_hex2("HWD", "ctl0=", (uint32_t)ctl0, "status2=", (uint32_t)st2);
-		con_hex2("HWD", "pet2=", (uint32_t)pet2, "hi=", (uint32_t)(st >> 32));
-	}
-	hold(8);
 #endif
 }
 #endif
