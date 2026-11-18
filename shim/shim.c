@@ -495,6 +495,94 @@ static void hold(unsigned s)
  * lemonadep milestone 1: adopt ABL's splash plane (display.c), then put
  * every fact the port still needs from the device on screen (GAPS.md).
  */
+#define SPMI_CORE	0x0c440000UL
+#define SPMI_CFG	0x0c40a000UL
+#define SPMI_OBS	0x0e600000UL
+#define SPMI_WR		0x0c600000UL
+
+static int
+spmi_find(uint32_t ppid)
+{
+	uint32_t count = rd32(SPMI_CORE + 4) & 0x7ffu;
+	int fallback = -1;
+	for (uint32_t i = 0; i < count && i < 512; i++) {
+		uint32_t map = rd32(SPMI_CORE + 0x900u + 4u * i);
+		if (!map || (((map >> 8) & 0xfffu) != ppid))
+			continue;
+		if ((rd32(SPMI_CFG + 0x700u + 4u * i) & 7u) == 0)
+			return (int)i;
+		if (fallback < 0)
+			fallback = (int)i;
+	}
+	return fallback;
+}
+
+static int
+spmi_rd(uint32_t apid, uint32_t addr, uint8_t *out)
+{
+	uint32_t off = 0x80u * apid;
+	wr32(SPMI_OBS + off, (1u << 27) | ((addr & 0xffu) << 4));
+	for (uint32_t i = 0; i < 1000; i++) {
+		uint32_t st = rd32(SPMI_OBS + off + 8u);
+		if (st & 1u) {
+			if (st & 0x0eu)
+				return -1;
+			*out = (uint8_t)rd32(SPMI_OBS + off + 0x18u);
+			return 0;
+		}
+		delay_ms(1);
+	}
+	return -1;
+}
+
+static int
+spmi_wr(uint32_t apid, uint32_t addr, uint8_t val)
+{
+	uint32_t w = SPMI_WR + 0x10000u * apid;
+	wr32(w + 0x10u, val);
+	wr32(w, ((addr & 0xffu) << 4) | 1u);	/* EXT_WRITEL, BC=1 */
+	for (uint32_t i = 0; i < 1000; i++) {
+		uint32_t st = rd32(w + 8u);
+		if (st & 1u)
+			return (st & 0x0eu) ? -1 : 0;
+		delay_ms(1);
+	}
+	return -1;
+}
+
+static void
+pon_survey(void)
+{
+	probe_armed = 1;
+	probe_faults = 0;
+	int apid = spmi_find(0x013u);
+	uint8_t type = 0, sub = 0, ctl = 0, ctl2 = 0, pet = 0, s1 = 0, s2 = 0;
+	int rt = spmi_rd(apid, 0x1301, &type);
+	int rs = spmi_rd(apid, 0x1305, &sub);
+	int rc = spmi_rd(apid, 0x1356, &ctl);
+	int rc2 = spmi_rd(apid, 0x1357, &ctl2);
+	int rp = spmi_rd(apid, 0x1358, &pet);
+	int r1 = spmi_rd(apid, 0x1354, &s1);
+	int r2 = spmi_rd(apid, 0x1355, &s2);
+	con_hex2("PON", "apid=", (uint32_t)apid, "type=", type);
+	con_hex2("PON", "sub=", sub, "ctl=", ctl);
+	con_hex2("PON", "ctl2=", ctl2, "s1=", s1);
+	con_hex2("PON", "s2=", s2, "pet=", pet);
+	con_hex2("PON", "rt=", (uint32_t)rt, "rs=", (uint32_t)rs);
+	con_hex2("PON", "rc=", (uint32_t)rc, "rc2=", (uint32_t)rc2);
+	con_hex2("PON", "rp=", (uint32_t)rp, "r1=", (uint32_t)r1);
+	con_hex2("PON", "r2=", (uint32_t)r2, "faults=", probe_faults);
+	probe_armed = 0;
+	if (rc2 == 0) {
+		uint8_t nv = ctl2 & (uint8_t)~0x80u;
+		int wr = spmi_wr(apid, 0x1357, nv);
+		uint8_t rb = 0;
+		int rr = spmi_rd(apid, 0x1357, &rb);
+		con_hex2("PON", "wr=", (uint32_t)wr, "rb=", rb);
+		con_hex2("PON", "rr=", (uint32_t)rr, "nv=", nv);
+	}
+}
+
 static void board_early(uintptr_t dtb)
 {
 	uint64_t lo = FB_BASE, size = FB_SIZE;
@@ -559,6 +647,10 @@ static void board_early(uintptr_t dtb)
 	con_str("PANEL", panel[0] ? panel : "(none)");
 	con_hex2("PSCI", "ver=", smc(PSCI_VERSION, 0, 0, 0), "smccc=", smc(SMCCC_VERSION, 0, 0, 0));
 	con_skip();
+#ifdef AP_WDT_BASE
+	pon_survey();
+	hold(8);
+#endif
 }
 #endif
 
