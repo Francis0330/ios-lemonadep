@@ -16,7 +16,8 @@ CFLAGS="-O2 -ffreestanding -nostdlib -fno-pic -mgeneral-regs-only -mstrict-align
 case "$BOARD" in
 sweet) OUT=out ;;
 lemonadep) OUT=out/lemonadep; CFLAGS="$CFLAGS -DBOARD_LEMONADEP" ;;
-*) echo "error: unknown BOARD=$BOARD (sweet, lemonadep)" >&2; exit 1 ;;
+pd2049) OUT=out/pd2049; CFLAGS="$CFLAGS -DBOARD_PD2049" ;;
+*) echo "error: unknown BOARD=$BOARD (sweet, lemonadep, pd2049)" >&2; exit 1 ;;
 esac
 SRCS="start.S shim.c console.c mmu.c fdt.c loader.c ufs.c payload_scan.c adt_patch.c display.c"
 mkdir -p "$OUT"
@@ -68,6 +69,15 @@ lemonadep)
 		--os_version "$OS_VERSION" --os_patch_level "$OS_PATCH_LEVEL" \
 		--cmdline "console=null" -o "$OUT/shim-boot-lemonadep.img"
 	IMG=$OUT/shim-boot-lemonadep.img
+	;;
+pd2049)
+	# PD2049 stock boot.img: Android 11 (RP1A.200720.012), security patch 2021-02.
+	: "${OS_VERSION:=11.0.0}"
+	: "${OS_PATCH_LEVEL:=2021-02}"
+	$MKBOOTIMG --header_version 3 --kernel "$OUT/Image" --ramdisk "$OUT/ramdisk.bin" \
+		--os_version "$OS_VERSION" --os_patch_level "$OS_PATCH_LEVEL" \
+		--cmdline "console=null" -o "$OUT/shim-boot-pd2049.img"
+	IMG=$OUT/shim-boot-pd2049.img
 	;;
 esac
 # Host render of the console layout.
