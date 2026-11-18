@@ -1,0 +1,80 @@
+--- a/bsd/dev/sweet_spmi.c
++++ b/bsd/dev/sweet_spmi.c
+@@ -17,12 +17,15 @@
+ #define SP_CORE_PA 0x0c440000u
+ #define SP_OBS_PA  0x0e600000u
+ #define SP_CFG_PA  0x0c40a000u
++#define SP_WR_PA   0x0c600000u
+ #define SP_NO_APID 0xffffu
+ 
+-static vm_offset_t sp_core, sp_obs, sp_cfg;
++static vm_offset_t sp_core, sp_obs, sp_cfg, sp_wr;
+ static IOLock *sp_lock;
+ static unsigned sp_count;
+ static bool sp_attempted, sp_ready;
++
++int sweet_spmi_write(unsigned sid, unsigned addr, uint8_t value);
+ /* A timed-out command may complete late: never reuse that lane this boot. */
+ static bool sp_poisoned[512];
+ 
+@@ -65,7 +68,8 @@
+ 	sp_core = ml_io_map(SP_CORE_PA, 0x2000);
+ 	sp_cfg = ml_io_map(SP_CFG_PA, 0x1000);
+ 	sp_obs = ml_io_map(SP_OBS_PA, 0x10000); /* EE 0, 512 * 0x80 */
+-	if (!sp_core || !sp_cfg || !sp_obs) {
++	sp_wr = ml_io_map(SP_WR_PA, 0x10000);
++	if (!sp_core || !sp_cfg || !sp_obs || !sp_wr) {
+ 		printf("SWEET BATTERY: SPMI mapping failed\n");
+ 		return -1;
+ 	}
+@@ -78,8 +82,11 @@
+ 		return -1;
+ 	}
+ 	sp_ready = true;
+-	printf("SWEET BATTERY: SPMI arb=%#x APIDs=%u, observer reads only\n",
++	printf("SWEET BATTERY: SPMI arb=%#x APIDs=%u, observer reads + PMIC WDT disable\n",
+ 	    arb_version, sp_count);
++	/* PD2049: ABL may leave the PMK8350 PON S2 watchdog armed. */
++	(void)sweet_spmi_write(0, 0x1357, 0);
++	(void)sweet_spmi_write(0, 0x1356, 0);
+ 	return 0;
+ }
+ 
+@@ -124,3 +131,37 @@
+ 	return -1;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
++
++int
++sweet_spmi_write(unsigned sid, unsigned addr, uint8_t value)
++{
++	unsigned peripheral = addr >> 8;
++	if (!sp_ready || sid != 0 || addr > 0xffffu ||
++	    (peripheral != 0x10 && peripheral != 0x11 && peripheral != 0x12 &&
++	    peripheral != 0x13 && peripheral != 0x48)) {
++		return -1;
++	}
++	IOLockLock(sp_lock);
++	uint16_t apid = sp_find_apid((sid << 8) | peripheral);
++	if (apid == SP_NO_APID || sp_poisoned[apid]) {
++		IOLockUnlock(sp_lock);
++		return -1;
++	}
++	unsigned off = 0x80u * apid;
++	*(volatile uint32_t *)(sp_wr + off + 0x10u) = value; /* WDATA0 */
++	uint32_t cmd = ((0u << 27) | ((uint32_t)(addr & 0xffu) << 4) | 1u);
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(sp_wr + off) = cmd; /* EXT_WRITEL, BC=1 */
++	__asm__ volatile("dsb osh" ::: "memory");
++	for (unsigned i = 0; i < 1000; ++i) {
++		uint32_t status = sp_rd(sp_wr, off + 0x08u);
++		if (status & 1u) {
++			IOLockUnlock(sp_lock);
++			return (status & 0x0eu) ? -1 : 0;
++		}
++		delay(1);
++	}
++	sp_poisoned[apid] = true;
++	IOLockUnlock(sp_lock);
++	return -1;
++}
