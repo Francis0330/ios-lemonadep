@@ -54,19 +54,40 @@ jobs:
           git init -q "$RUNNER_TEMP/mkbootimg"
           git -C "$RUNNER_TEMP/mkbootimg" fetch -q --depth 1 https://android.googlesource.com/platform/system/tools/mkbootimg 028bdc06ce87ab1ee23204feb5cd5ee406484618
           git -C "$RUNNER_TEMP/mkbootimg" checkout -q FETCH_HEAD
-      - name: Build PD2049 shim
+      - name: Fetch PD2049 kernel artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/kernel"
+          gh run download 44297945132 -n xnu-kernel-pd2049 -D "$RUNNER_TEMP/kernel"
+          ls -l "$RUNNER_TEMP/kernel"
+      - name: Build payload and final boot image
         env:
           BOARD: pd2049
           MKBOOTIMG: python3 ${{ runner.temp }}/mkbootimg/mkbootimg.py
-        run: bash shim/build.sh
-      - name: Upload shim
+          OS_VERSION: "11.0.0"
+          OS_PATCH_LEVEL: "2021-02"
+          BOOTARGS: >-
+            debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress
+            rd=ufsroot0 ufsrw=1 rootrw=1 unentitled_ios_sim_launch=1 ignition_level=1
+            wdt_test=no_user_checkin launchd_unsecure_cache=1 wdt=-1
+            sweettouch=1 sweetkeys=1 sweetusb=0
+        run: |
+          python3 tools/mkpayload.py \
+            "$RUNNER_TEMP/kernel/kernel.development.sweet" \
+            pd2049.adt "$RUNNER_TEMP/pd2049-payload.bin" \
+            --cmdline "$BOOTARGS"
+          bash shim/build.sh "$RUNNER_TEMP/pd2049-payload.bin"
+          cp shim/out/pd2049/shim-boot-pd2049.img "$RUNNER_TEMP/shim-boot-pd2049.img"
+      - name: Upload shim and boot image
         uses: actions/upload-artifact@v4
         with:
-          name: shim-pd2049
+          name: boot-pd2049
           path: |
             shim/out/pd2049/Image
             shim/out/pd2049/shim.elf
             shim/out/pd2049/shim-boot-pd2049.img
+            ${{ runner.temp }}/pd2049-payload.bin
           if-no-files-found: warn
 
   kernel:
