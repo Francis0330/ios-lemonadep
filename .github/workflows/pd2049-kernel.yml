@@ -40,7 +40,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.build_kernel) ||
       (github.event_name == 'push' && contains(github.event.head_commit.message, '[kernel]'))
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
