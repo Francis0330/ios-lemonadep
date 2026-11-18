@@ -47,7 +47,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.build_kernel) ||
       (github.event_name == 'push')
-    runs-on: macos-13
+    runs-on: macos-15
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
