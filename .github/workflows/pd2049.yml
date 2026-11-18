@@ -43,10 +43,36 @@ env:
   MACHINE_CONFIG: SWEET
 
 jobs:
+  shim:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu device-tree-compiler cpio clang qemu-user
+          git init -q "$RUNNER_TEMP/mkbootimg"
+          git -C "$RUNNER_TEMP/mkbootimg" fetch -q --depth 1 https://android.googlesource.com/platform/system/tools/mkbootimg 028bdc06ce87ab1ee23204feb5cd5ee406484618
+          git -C "$RUNNER_TEMP/mkbootimg" checkout -q FETCH_HEAD
+      - name: Build PD2049 shim
+        env:
+          BOARD: pd2049
+          MKBOOTIMG: python3 ${{ runner.temp }}/mkbootimg/mkbootimg.py
+        run: bash shim/build.sh
+      - name: Upload shim
+        uses: actions/upload-artifact@v4
+        with:
+          name: shim-pd2049
+          path: |
+            shim/out/pd2049/Image
+            shim/out/pd2049/shim.elf
+            shim/out/pd2049/shim-boot-pd2049.img
+          if-no-files-found: warn
+
   kernel:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.build_kernel) ||
-      (github.event_name == 'push')
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[kernel]'))
     runs-on: macos-15
     timeout-minutes: 120
     steps:
