@@ -648,8 +648,19 @@ static void board_early(uintptr_t dtb)
 	con_hex2("PSCI", "ver=", smc(PSCI_VERSION, 0, 0, 0), "smccc=", smc(SMCCC_VERSION, 0, 0, 0));
 	con_skip();
 #ifdef AP_WDT_BASE
-	pon_survey();
-	hold(8);
+\tpon_survey();
+\t/* SM8350: Linux pets the hypervisor/Haven watchdog over SMC 0x86000005-8. */
+\t{
+\t\tuint64_t st = smc(0x86000006, 0, 0, 0);
+\t\tuint64_t pet = smc(0x86000007, 0, 0, 0);
+\t\tuint64_t ctl0 = smc(0x86000005, 0, 0, 0);
+\t\tuint64_t st2 = smc(0x86000006, 0, 0, 0);
+\t\tuint64_t pet2 = smc(0x86000007, 0, 0, 0);
+\t\tcon_hex2("HWD", "status=", (uint32_t)st, "pet=", (uint32_t)pet);
+\t\tcon_hex2("HWD", "ctl0=", (uint32_t)ctl0, "status2=", (uint32_t)st2);
+\t\tcon_hex2("HWD", "pet2=", (uint32_t)pet2, "hi=", (uint32_t)(st >> 32));
+\t}
+\thold(8);
 #endif
 }
 #endif
