@@ -1,0 +1,25 @@
+name: extract-kernel
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: run id containing xnu-kernel-pd2049
+        default: "44475252276"
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fetch and extract kernel artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh run download "${{ inputs.run_id }}" -R "${{ github.repository }}" -n xnu-kernel-pd2049 -D dl
+          cp dl/kernel.development.sweet out/kernel.development.sweet
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-sweet-only
+          path: out/kernel.development.sweet
+          retention-days: 3
