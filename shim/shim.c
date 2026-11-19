@@ -619,17 +619,21 @@ static void board_early(uintptr_t dtb)
 	}
 	con_clear(BLACK);
 #ifdef AP_WDT_BASE
-	/* Gunyah watchdog: STATUS a0=status a2=ms since ping; CONTROL 2 = disable. */
+	/* Does Gunyah PING actually reset a2 (ms since last ping)? */
 	{
-		uint64_t a2 = 0, a2b = 0;
-		uint64_t st = smc_ret2(0x86000006, 0, 0, 0, &a2);
-		uint64_t ctl = smc(0x86000005, 2, 0, 0);
+		uint64_t a2a = 0, a2b = 0, a2c = 0;
+		uint64_t st = smc_ret2(0x86000006, 0, 0, 0, &a2a);
+		uint64_t ping = smc(0x86000007, 0, 0, 0);
+		delay_ms(2000);
 		uint64_t st2 = smc_ret2(0x86000006, 0, 0, 0, &a2b);
-		con_hex2("HWD", "st=", (uint32_t)st, "a2=", (uint32_t)a2);
-		con_hex2("HWD", "ctl2=", (uint32_t)ctl, "st2=", (uint32_t)st2);
-		con_hex2("HWD", "a2b=", (uint32_t)a2b, "hi=", (uint32_t)(st >> 32));
+		delay_ms(2000);
+		uint64_t st3 = smc_ret2(0x86000006, 0, 0, 0, &a2c);
+		con_hex2("PING", "st=", (uint32_t)st, "a2a=", (uint32_t)a2a);
+		con_hex2("PING", "ping=", (uint32_t)ping, "a2b=", (uint32_t)a2b);
+		con_hex2("PING", "st2=", (uint32_t)st2, "a2c=", (uint32_t)a2c);
+		con_hex2("PING", "st3=", (uint32_t)st3, "d=", (uint32_t)(a2c - a2a));
 	}
-	hold(30);
+	hold(10);
 #endif
 #ifdef AP_WDT_BASE
 	/* PD2049: ABL may leave the AP watchdog armed; pet and disable it before XNU. */
